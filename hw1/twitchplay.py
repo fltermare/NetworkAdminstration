@@ -4,10 +4,9 @@ import string
 import subprocess
 import time
 
-
 host = "irc.twitch.tv"
 port = 6667
-roundtime = 10
+roundtime = 15
 #play_mode = 0
 
 def log_write(log_list) :
@@ -16,15 +15,40 @@ def log_write(log_list) :
     fp.write('\n')
     fp.close()
 
-def check_has_message(data) :
-    return re.match(r'^:[a-zA-Z0-9_]+\![a-zA-Z0-9_]+@[a-zA-Z0-9_]+(\.tmi\.twitch\.tv|\.testserver\.local) PRIVMSG #[a-zA-Z0-9_]+ :.+$', data)
+def log_mode(input) :
+    fp = open('./log_twitch', 'a', encoding = 'UTF-8')
+    fp.write('***mode change to ')
+    fp.write(input)
+    fp.write(' ***\n')
+    fp.close()
+
+def log_result(input) :
+    fp = open('./log_twitch', 'a', encoding = 'UTF-8')
+    fp.write(';;;result is ')
+    fp.write(input)
+    fp.write(' ;;;\n')
+    fp.close()    
+
+def check_has_message(data, n) :
+    if n == 0 :
+        return re.match(r'^:[a-zA-Z0-9_]+\![a-zA-Z0-9_]+@[a-zA-Z0-9_]+(\.tmi\.twitch\.tv|\.testserver\.local) PRIVMSG #[a-zA-Z0-9_]+ :.+$', data)
+    elif n == 1 :
+        return re.match(r'^:[a-zA-Z0-9_]+\![a-zA-Z0-9_]+@[a-zA-Z0-9_]+(\.tmi\.twitch\.tv|\.testserver\.local) PRIVMSG #[a-zA-Z0-9_]+ :[0-9]+', data)
+
 
 def mode_change(input) :
+    global s
     if input == 'normal' :
+        s.send(bytes("PRIVMSG #%s : ****mode change to normal****\r\n" %username, "UTF-8"))
+        log_mode(input)
         return 0
     elif input == 'democracy' :
+        s.send(bytes("PRIVMSG #%s : ****mode change to democracy****\r\n" %username, "UTF-8"))
+        log_mode(input)
         return 1
     elif input == 'violence' :
+        s.send(bytes("PRIVMSG #%s : ****mode change to violence****\r\n" %username, "UTF-8"))
+        log_mode(input)
         return 2
 
 #playmode doesn't be used now
@@ -33,55 +57,171 @@ def parse_command(data, speaker, playmode) :
         mode = re.findall("normal|democracy|violence", data)
         global play_mode
         play_mode = mode_change(mode[0])
-        '''
-        string = 'change mode to ' + str(mode)
-        print(string)
-        print(play_mode)
-        '''
-        return mode
+        return []
     else :
         match = re.findall("a|b|up|down|right|left|start|select", data)
     return match
 
 
-
 def key_press(inputs) :
     for input in inputs :
         for i in input :
+            if re.match(r'[EOC]', i): continue
             cmd = "xte 'str " + i +"' "
             subprocess.call([cmd], shell = True)
 
 def democracy(command_buff) :
     global s
     i = 0
-    voting_session = 10
+    voting_session = 15
 
     s.send(bytes("PRIVMSG #%s : -----here are the selections-----\r\n" %username, "UTF-8"))
+    cmds = list(set(command_buff))
+    if 'EOC' in command_buff :
+        cmds.remove('EOC')
 
-    for cmds in command_buff :
-        i += 1
-        string = username + " : No." + str(i) + " "
-        for cmd in cmds :
-            string = string + cmd
-
-        #print(string)
-        s.send(bytes("PRIVMSG #%s\r\n" %string, "UTF-8"))
+    string = username + " : "
+    for cmd in cmds :
+        string = string + cmd + " "
+    s.send(bytes("PRIVMSG #%s\r\n" %string, "UTF-8"))
+    print(cmds)
 
     s.send(bytes("PRIVMSG #%s : -----start voting-----\r\n" %username, "UTF-8"))
-    s.send(bytes("PRIVMSG #%s : [bot] next round starts in 10 seconds\r\n" %username, "UTF-8"))
+    s.send(bytes("PRIVMSG #%s : [bot] next round starts in 15 seconds\r\n" %username, "UTF-8"))
     voting_start = time.time()
 
+    vote_dict = dict()
     while True :
+        try :
+            time.sleep(0.1)            
+            vdata = s.recv(1024).decode("UTF-8")
+        except socket.error :
+            vdata = None
+
+        if check_has_message(vdata, 0) :
+            vdata = vdata.strip().split(':')
+            if len(vdata) != 3 : break
+            ballots = parse_command(vdata[2], "voting", play_mode)
+            print(ballots)
+            for ballot in ballots :
+                if ballot in cmds :
+                    vote_dict[ballot] = vote_dict.get(ballot, 0) + 1
+
         now = time.time()
-        if now - voting_start > voting_session :
-            s.send(bytes("PRIVMSG #%s : -----vote end-----\r\n" %username, "UTF-8"))
+        if now - voting_start > voting_session :            
+            s.send(bytes("PRIVMSG #%s : -----vote end next round starts-----\r\n" %username, "UTF-8"))
+            
+            tmp = list()
+            for key, value in vote_dict.items() :
+                tmp.append((value, key))
+            tmp = sorted(tmp, reverse=True)
+            print(tmp)
+            tmp2 = [(key, value) for (key, value) in tmp if key == tmp[0][0]]
+            if len(tmp2) == 1 :
+                s.send(bytes("PRIVMSG #clover8112 : -----result %s-----\r\n" %tmp2[0][1], "UTF-8"))
+                key_press([[tmp2[0][1]]])
+                log_result(tmp2[0][1])
+                print(tmp2[0][1])
+            else :
+                tmp3 = [value for (key, value) in tmp2]
+                democracy(tmp3)
+
+            time.sleep(0.5)
             break
 
-    #print("democracy")
     return
 
+def violence_vote(command_buff) :
+    global s
+    s.send(bytes("PRIVMSG #%s : -----here are the selections-----\r\n" %username, "UTF-8"))    
+    cmds = command_buff
+    if 'EOC' in command_buff :
+        cmds.remove('EOC')
+
+    string = username + " : "
+    for cmd in cmds :
+        string = string + cmd + " "
+    s.send(bytes("PRIVMSG #%s\r\n" %string, "UTF-8"))
+    s.send(bytes("PRIVMSG #%s : -----start voting-----\r\n" %username, "UTF-8"))
+    s.send(bytes("PRIVMSG #%s : [bot] next round starts in 15 seconds\r\n" %username, "UTF-8"))
+    voting_start = time.time()
+
+
+    while True :
+        try :
+            time.sleep(0.1)            
+            vdata = s.recv(1024).decode("UTF-8")
+        except socket.error :
+            vdata = None
+
+        if check_has_message(vdata, 0) :
+            vdata = vdata.strip().split(':')
+            if len(vdata) != 3 : break
+            ballots = parse_command(vdata[2], "voting", play_mode)
+            print(ballots)
+            for ballot in ballots :
+                if ballot in cmds :
+                    vote_dict[ballot] = vote_dict.get(ballot, 0) + 1
+
+        now = time.time()
+        if now - voting_start > voting_session :            
+            s.send(bytes("PRIVMSG #%s : -----vote end next round starts-----\r\n" %username, "UTF-8"))
+            
+            tmp = list()
+            for key, value in vote_dict.items() :
+                tmp.append((value, key))
+            tmp = sorted(tmp, reverse=True)
+            print(tmp)
+            tmp2 = [(key, value) for (key, value) in tmp if key == tmp[0][0]]
+            if len(tmp2) == 1 :
+                s.send(bytes("PRIVMSG #clover8112 : -----result %s-----\r\n" %tmp2[0][1], "UTF-8"))
+                key_press([[tmp2[0][1]]])
+                print(tmp2[0][1])
+            else :
+                tmp3 = [value for (key, value) in tmp2]
+                democracy(tmp3)
+
+            time.sleep(0.5)
+            break
+
+    return
+
+
+
 def violence(command_buff) :
-    print("violence")
+    global s
+    voting_session = 15
+    command_dict = dict()
+    top = command_buff[0]
+    last = 0
+    for cmd in command_buff:
+        if cmd == top :
+            last += 1
+        else :
+            command_dict[top] = command_dict.get(top, 0)
+            if command_dict[top] < last :
+                command_dict[top] = last
+            last = 1
+            top = cmd
+    command_dict['EOC'] = 0
+
+    tmp = list()
+    for key, value in command_dict.items() :
+        tmp.append((value, key))
+
+    tmp = sorted(tmp, reverse=True)
+    print(tmp)
+    tmp2 = [(key, value) for (key, value) in tmp if key == tmp[0][0]]
+    if len(tmp2) == 1 :
+        s.send(bytes("PRIVMSG #clover8112 : -----result %s-----\r\n" %tmp2[0][1], "UTF-8"))
+        key_press([[tmp2[0][1]]])
+        log_result(tmp2[0][1])
+        print(tmp2[0][1])
+    else :
+        tmp3 = [value for (key, value) in tmp2]
+        democracy(tmp3)
+        print("tmp3")
+        print(tmp3)
     return
 
 
@@ -102,12 +242,9 @@ def main() :
 
     command_buff = []
     game_start_time = time.time()
-    #tmp_time = int(time.strftime('%S',time.localtime(time.time())))
     tmp_time = time.time()
 
     while True :
-        #t = int(time.strftime('%S',time.localtime(time.time())))
-        #print(t)
 
         #s.send(bytes("PRIVMSG #%s :Can you hear me?\r\n" %username, "UTF-8"))
         #print("sended")
@@ -117,7 +254,7 @@ def main() :
         #except :
             data = None            
 
-        if check_has_message(data) :
+        if check_has_message(data, 0) :
             current_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
             print(current_time)
             data = data.strip().split(':')
@@ -127,8 +264,9 @@ def main() :
             speaker = data[1].split('!')[0]
 
             list_buff = parse_command(command, speaker, play_mode)
-            #command_buff = command_buff + list_buff
-            command_buff.append(list_buff)
+            list_buff.append('EOC')
+            command_buff = command_buff + list_buff
+            #command_buff.append(list_buff)
             print(command_buff)
             print(speaker)
             
@@ -138,7 +276,7 @@ def main() :
         
         t = time.time()
         if (t-tmp_time) > roundtime :
-            print(t)
+            #print(t)
 
             if play_mode == 0 :
                 key_press(command_buff)
@@ -151,7 +289,6 @@ def main() :
                 command_buff = []
 
             tmp_time = t
-
             #s.send(bytes("PRIVMSG #%s : -----new round-----\r\n" %username, "UTF-8"))
 
 
