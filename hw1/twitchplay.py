@@ -4,6 +4,7 @@ import string
 import subprocess
 import time
 
+
 host = "irc.twitch.tv"
 port = 6667
 roundtime = 15
@@ -66,14 +67,43 @@ def parse_command(data, speaker, playmode) :
 def key_press(inputs) :
     for input in inputs :
         for i in input :
-            if re.match(r'[EOC]', i): continue
+            if re.match(r'[EOC]', i): 
+                continue
+            elif re.match(r'[a]', i) :
+                cmd = "xte 'keydown End' 'usleep 70000' 'keyup End'"
+                subprocess.call([cmd], shell = True)
+            elif re.match(r'[b]', i) :
+                cmd = "xte 'keydown Page_Up' 'usleep 70000' 'keyup Page_Up'"
+                subprocess.call([cmd], shell = True)
+            elif re.match(r'[up]', i):
+                cmd = "xte 'keydown Up' 'usleep 70000' 'keyup Up'"
+                subprocess.call([cmd], shell = True)
+            elif re.match(r'[down]', i) :
+                cmd = "xte 'keydown Down' 'usleep 70000' 'keyup Down'"
+                subprocess.call([cmd], shell = True)
+            elif re.match(r'[right]', i) :
+                cmd = "xte 'keydown Right' 'usleep 70000' 'keyup Right'"
+                subprocess.call([cmd], shell = True)
+            elif re.match(r'[left]', i) :
+                cmd = "xte 'keydown Left' 'usleep 70000' 'keyup Left'"
+                subprocess.call([cmd], shell = True)
+            elif re.match(r'[start]', i) :
+                cmd = "xte 'keydown Return' 'usleep 70000' 'keyup Return'"
+                subprocess.call([cmd], shell = True)
+            elif re.match(r'[select]', i) :
+                cmd = "xte 'keydown BackSpace' 'usleep 70000' 'keyup BackSpace'"
+                subprocess.call([cmd], shell = True)
+'''                    
             cmd = "xte 'str " + i +"' "
             subprocess.call([cmd], shell = True)
+'''
+
 
 def democracy(command_buff) :
     global s
     i = 0
     voting_session = 15
+    if command_buff == [] : return
 
     s.send(bytes("PRIVMSG #%s : -----here are the selections-----\r\n" %username, "UTF-8"))
     cmds = list(set(command_buff))
@@ -118,7 +148,7 @@ def democracy(command_buff) :
             print(tmp)
             tmp2 = [(key, value) for (key, value) in tmp if key == tmp[0][0]]
             if len(tmp2) == 1 :
-                s.send(bytes("PRIVMSG #clover8112 : -----result %s-----\r\n" %tmp2[0][1], "UTF-8"))
+                s.send(bytes("PRIVMSG #channal : -----result %s-----\r\n" %tmp2[0][1], "UTF-8"))
                 key_press([[tmp2[0][1]]])
                 log_result(tmp2[0][1])
                 print(tmp2[0][1])
@@ -130,62 +160,6 @@ def democracy(command_buff) :
             break
 
     return
-
-def violence_vote(command_buff) :
-    global s
-    s.send(bytes("PRIVMSG #%s : -----here are the selections-----\r\n" %username, "UTF-8"))    
-    cmds = command_buff
-    if 'EOC' in command_buff :
-        cmds.remove('EOC')
-
-    string = username + " : "
-    for cmd in cmds :
-        string = string + cmd + " "
-    s.send(bytes("PRIVMSG #%s\r\n" %string, "UTF-8"))
-    s.send(bytes("PRIVMSG #%s : -----start voting-----\r\n" %username, "UTF-8"))
-    s.send(bytes("PRIVMSG #%s : [bot] next round starts in 15 seconds\r\n" %username, "UTF-8"))
-    voting_start = time.time()
-
-
-    while True :
-        try :
-            time.sleep(0.1)            
-            vdata = s.recv(1024).decode("UTF-8")
-        except socket.error :
-            vdata = None
-
-        if check_has_message(vdata, 0) :
-            vdata = vdata.strip().split(':')
-            if len(vdata) != 3 : break
-            ballots = parse_command(vdata[2], "voting", play_mode)
-            print(ballots)
-            for ballot in ballots :
-                if ballot in cmds :
-                    vote_dict[ballot] = vote_dict.get(ballot, 0) + 1
-
-        now = time.time()
-        if now - voting_start > voting_session :            
-            s.send(bytes("PRIVMSG #%s : -----vote end next round starts-----\r\n" %username, "UTF-8"))
-            
-            tmp = list()
-            for key, value in vote_dict.items() :
-                tmp.append((value, key))
-            tmp = sorted(tmp, reverse=True)
-            print(tmp)
-            tmp2 = [(key, value) for (key, value) in tmp if key == tmp[0][0]]
-            if len(tmp2) == 1 :
-                s.send(bytes("PRIVMSG #clover8112 : -----result %s-----\r\n" %tmp2[0][1], "UTF-8"))
-                key_press([[tmp2[0][1]]])
-                print(tmp2[0][1])
-            else :
-                tmp3 = [value for (key, value) in tmp2]
-                democracy(tmp3)
-
-            time.sleep(0.5)
-            break
-
-    return
-
 
 
 def violence(command_buff) :
@@ -213,7 +187,7 @@ def violence(command_buff) :
     print(tmp)
     tmp2 = [(key, value) for (key, value) in tmp if key == tmp[0][0]]
     if len(tmp2) == 1 :
-        s.send(bytes("PRIVMSG #clover8112 : -----result %s-----\r\n" %tmp2[0][1], "UTF-8"))
+        s.send(bytes("PRIVMSG #channal : -----result %s-----\r\n" %tmp2[0][1], "UTF-8"))
         key_press([[tmp2[0][1]]])
         log_result(tmp2[0][1])
         print(tmp2[0][1])
